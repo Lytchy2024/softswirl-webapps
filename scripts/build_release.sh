@@ -38,7 +38,9 @@ echo "== 2. Web-Apps aus apps.json"
 APPS="$BUILD/apps"; mkdir -p "$APPS"
 python3 - "$ROOT/apps.json" <<'PY' > "$BUILD/apps.tsv"
 import json, sys
-for a in json.load(open(sys.argv[1])): print("\t".join([a["name"], a["url"], a["slug"], a.get("letters", a["name"][:2])]))
+for a in json.load(open(sys.argv[1])):
+    if a.get("kind", "webapp") != "webapp": continue   # Programme (dmgapp/pkgwatch) sind keine WebKit-Apps
+    print("\t".join([a["name"], a["url"], a["slug"], a.get("letters", a["name"][:2])]))
 PY
 while IFS=$'\t' read -r NAME URL SLUG LETTERS; do
   APP="$APPS/$NAME.app"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
