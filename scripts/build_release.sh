@@ -16,6 +16,7 @@ SIGN_ID="${SIGN_ID:-}"; NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 [ $ADHOC -eq 1 ] && NOTARIZE=0
 BUILD="$ROOT/build"; DIST="$ROOT/dist"; if [ $INSTALLER_ONLY -eq 1 ]; then [ -d "$BUILD/apps" ] || { echo "build/apps fehlt - erst voller Build"; exit 1; }; else rm -rf "$BUILD"; fi; mkdir -p "$BUILD" "$DIST"
 ARCHS=(x86_64 arm64)
+APPS="$BUILD/apps"
 sign() { # sign <pfad> [entitlements]
   if [ $ADHOC -eq 1 ]; then codesign --force -s - "$1" >/dev/null 2>&1
   else codesign --force --options runtime --timestamp ${2:+--entitlements "$2"} -s "$SIGN_ID" "$1"; fi
@@ -36,7 +37,7 @@ cat > "$BUILD/webapp.entitlements" <<'ENT'
 ENT
 
 echo "== 2. Web-Apps aus apps.json"
-APPS="$BUILD/apps"; mkdir -p "$APPS"
+mkdir -p "$APPS"
 python3 - "$ROOT/apps.json" <<'PY' > "$BUILD/apps.tsv"
 import json, sys
 for a in json.load(open(sys.argv[1])):
