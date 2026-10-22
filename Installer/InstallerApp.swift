@@ -237,7 +237,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 16) {
-                if let logo = model.logo { Image(nsImage: logo).resizable().interpolation(.high).frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)) }
+                if let logo = model.logo { Image(nsImage: logo).resizable().interpolation(.high).frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous)) }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Softswirl Studio").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.75)).textCase(.uppercase)
                     Text("Apps installieren").font(.title.weight(.bold)).foregroundStyle(.white)

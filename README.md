@@ -63,6 +63,7 @@ gh release create v1.0.0 dist/Softswirl-Web-Apps-1.0.0.dmg --title "Softswirl We
 ```
 
 Ohne Zertifikat: `scripts/build_release.sh --adhoc` (nur lokal, unsigniert im Sinne von Gatekeeper).
+Nur Installer und DMG neu (Web-Apps aus `build/apps` wiederverwenden, bereits notarisiert): `--installer-only`.
 
 ## iCloud-Abgleich der gespeicherten Anmeldungen (optional, nicht eingerichtet)
 
@@ -78,7 +79,7 @@ Capability „Keychain Sharing" (Entwicklerportal → Identifiers → App-ID je 
 | `WebKitApp/main.swift` | die App-Hülle (AppKit + WKWebView), Start-URL aus `WebAppStartURL` in der Info.plist |
 | `Installer/InstallerApp.swift` | der Installer (SwiftUI): Auswahl, Kopie nach `~/Applications`, Dock-Einträge |
 | `apps.json` | Liste der Apps |
-| `icons/` | Icons (`<name>.icns`), `logo.png` für Installer und Kopfzeile |
+| `icons/` | Icons (`<name>.icns`), `logo.png` = SoftSwirl-Studio-Logo für Installer-Icon und Kopfzeile (`logo-swirl-favicon.png` = altes Favicon) |
 | `scripts/build_release.sh` | Build, Signatur, Notarisierung, DMG |
 | `scripts/make_letter_icon.swift` | Buchstaben-Icons für Apps ohne eigenes Icon |
 | `scripts/make_image_icon.swift` | Icon aus einem Logo-Bild (zentriert, Rand, abgerundeter Hintergrund) |
