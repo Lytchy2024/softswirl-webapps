@@ -9,7 +9,7 @@
 # Ergebnis: dist/Softswirl-Web-Apps-<version>.dmg (signiert, notarisiert, gestapelt), dist/Softswirl Web-Apps.app
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="1.0.0"; NOTARIZE=1; ADHOC=0
+VERSION="1.1.0"; NOTARIZE=1; ADHOC=0
 while [ $# -gt 0 ]; do case "$1" in --version) VERSION="$2"; shift;; --no-notarize) NOTARIZE=0;; --adhoc) ADHOC=1;; *) echo "unbekannt: $1"; exit 1;; esac; shift; done
 SIGN_ID="${SIGN_ID:-}"; NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 [ -n "$SIGN_ID" ] || ADHOC=1
@@ -77,6 +77,22 @@ while IFS=$'\t' read -r NAME URL SLUG LETTERS; do
 PL
   sign "$APP" "$BUILD/webapp.entitlements"; echo "   $NAME.app"
 done < "$BUILD/apps.tsv"
+
+if [ $NOTARIZE -eq 1 ]; then
+  [ -n "$NOTARY_PROFILE" ] || { echo "NOTARY_PROFILE fehlt"; exit 1; }
+  echo "== 2b. Web-Apps einzeln notarisieren (parallel einreichen, dann warten, dann stapeln)"
+  IDS=(); NAMES=()
+  while IFS=$'\t' read -r NAME URL SLUG LETTERS; do
+    ditto -c -k --keepParent "$APPS/$NAME.app" "$BUILD/$SLUG.zip"
+    ID=$(xcrun notarytool submit "$BUILD/$SLUG.zip" --keychain-profile "$NOTARY_PROFILE" --output-format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    IDS+=("$ID"); NAMES+=("$NAME"); echo "   eingereicht: $NAME ($ID)"
+  done < "$BUILD/apps.tsv"
+  for i in "${!IDS[@]}"; do
+    ST=$(xcrun notarytool wait "${IDS[$i]}" --keychain-profile "$NOTARY_PROFILE" --output-format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+    [ "$ST" = "Accepted" ] || { echo "Notarisierung fehlgeschlagen: ${NAMES[$i]} ($ST)"; xcrun notarytool log "${IDS[$i]}" --keychain-profile "$NOTARY_PROFILE"; exit 1; }
+    xcrun stapler staple "$APPS/${NAMES[$i]}.app" >/dev/null && echo "   notarisiert + gestapelt: ${NAMES[$i]}"
+  done
+fi
 
 echo "== 3. Installer-App"
 INST="$DIST/Softswirl Web-Apps.app"; rm -rf "$INST"; mkdir -p "$INST/Contents/MacOS" "$INST/Contents/Resources/Apps"

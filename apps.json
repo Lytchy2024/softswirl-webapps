@@ -1,8 +1,10 @@
 [
-  { "name": "Autosportshop", "slug": "autosportshop", "url": "https://tm2.carparts-cat.com/login/autosportshop", "letters": "AS", "description": "Autosportshop Teilekatalog (carparts-cat)" },
+  { "name": "Autosportshop", "slug": "autosportshop", "url": "https://tm2.carparts-cat.com/login/autosportshop", "letters": "AS", "description": "Autosportshop Luxemburg – Teilekatalog" },
   { "name": "partslink24", "slug": "partslink24", "url": "https://www.partslink24.com/de/login/index.html", "letters": "pl", "description": "partslink24 – Original-Ersatzteilkatalog" },
-  { "name": "APL", "slug": "apl", "url": "https://tm1.carparts-cat.com/login/car", "letters": "APL", "description": "APL Teilekatalog (carparts-cat)" },
+  { "name": "APL", "slug": "apl", "url": "https://tm1.carparts-cat.com/login/car", "letters": "APL", "description": "APL Autoparts Luxembourg – Teilekatalog" },
   { "name": "BBT Garage Software", "slug": "bbt", "url": "https://bbt-cloud.be/login/", "letters": "BBT", "description": "BBT Cloud Werkstattsoftware" },
   { "name": "IndiMO NeuwagenTeam", "slug": "indimo", "url": "https://portal.neuwagen.team/index.php", "letters": "NT", "description": "IndiMO NEUwagenTEAM Portal" },
-  { "name": "eBay", "slug": "ebay", "url": "https://www.ebay.de/", "letters": "eBay", "description": "eBay Deutschland" }
+  { "name": "eBay", "slug": "ebay", "url": "https://www.ebay.de/", "letters": "eBay", "description": "eBay Deutschland" },
+  { "name": "TeamViewer QuickSupport", "slug": "teamviewerqs", "kind": "dmgapp", "url": "https://download.teamviewer.com/download/TeamViewerQS.dmg", "appName": "TeamViewerQS.app", "teamId": "H7UGFBUGV6", "description": "Fernwartung – offizieller Download, Signatur TeamViewer Germany GmbH" },
+  { "name": "Bitdefender", "slug": "bitdefender", "kind": "pkgwatch", "signer": "Developer ID Installer: Bitdefender", "pkgMatch": "bitdefender", "description": "Virenschutz – Download-Link aus Bitdefender Central einfügen oder Paket wählen" }
 ]

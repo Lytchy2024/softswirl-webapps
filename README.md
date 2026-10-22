@@ -13,6 +13,19 @@ nach `~/Applications` kopiert und ins Dock legt.
 
 Das DMG und alle Apps sind mit Developer ID signiert und von Apple notarisiert, es erscheint keine Warnung.
 
+## Programme
+
+Neben den Web-Apps installiert der Installer auch Programme fürs Gerät:
+
+* **TeamViewer QuickSupport** – offizieller Download, Prüfung der Developer-ID-Signatur (TeamViewer Germany GmbH) und der
+  Notarisierung, Kopie nach `/Applications`.
+* **Bitdefender** – Download-Link aus Bitdefender Central einfügen (der Installer öffnet die Seite, dort auf Herunterladen
+  klicken) oder ein vorhandenes `.pkg` wählen; Prüfung der Paketsignatur (Bitdefender SRL), Installation mit Admin-Passwort.
+  Die Freigaben in den Systemeinstellungen (Erweiterungen, Festplattenzugriff) bleiben Handarbeit.
+
+Installierte Apps bekommen das Quarantäne-Flag entfernt, damit nicht jede beim ersten Start einzeln nachfragt; alle sind
+vorher signiert und notarisiert.
+
 ## Was jede Web-App kann
 
 Eigenes Fenster (merkt sich Größe und Lage), eigene Sitzung je App, Downloads nach „Downloads" mit Anzeige im Finder,
@@ -23,7 +36,7 @@ Nicht enthalten: Passwort-Autofill aus dem iCloud-Schlüsselbund (nur Safari) un
 ## Apps hinzufügen
 
 `apps.json` um einen Eintrag ergänzen (`name`, `slug`, `url`, optional `letters` für ein Buchstaben-Icon und
-`description`). Ein Icon als `icons/<name>.icns` ablegen; fehlt es, erzeugt der Build ein Buchstaben-Icon.
+`description`; Programme mit `kind` = `dmgapp` (`url`, `appName`, `teamId`) oder `pkgwatch` (`signer`, `pkgMatch`)). Ein Icon als `icons/<name>.icns` ablegen; fehlt es, erzeugt der Build ein Buchstaben-Icon.
 Dann ein neues Release bauen.
 
 ## Release bauen
@@ -48,5 +61,6 @@ Ohne Zertifikat: `scripts/build_release.sh --adhoc` (nur lokal, unsigniert im Si
 | `icons/` | Icons (`<name>.icns`), `logo.png` für Installer und Kopfzeile |
 | `scripts/build_release.sh` | Build, Signatur, Notarisierung, DMG |
 | `scripts/make_letter_icon.swift` | Buchstaben-Icons für Apps ohne eigenes Icon |
+| `scripts/make_image_icon.swift` | Icon aus einem Logo-Bild (zentriert, Rand, abgerundeter Hintergrund) |
 
 © Softswirl Studio
