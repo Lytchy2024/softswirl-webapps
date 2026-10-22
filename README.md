@@ -28,10 +28,16 @@ vorher signiert und notarisiert.
 
 ## Was jede Web-App kann
 
+Symbolleiste mit Zurück, Vorwärts, Neu laden, **Startseite** und einem Schlüssel-Knopf für gespeicherte Anmeldungen.
+**Eingebauter Passwortspeicher:** Beim Anmelden fragt die App, ob sie Benutzername und Passwort für die Website speichern
+soll (im Schlüsselbund dieses Macs, mit iCloud-Schlüsselbund auf allen Geräten des Nutzers). Beim nächsten Besuch trägt sie
+die Anmeldung automatisch ein; mehrere Konten lassen sich über den Schlüssel-Knopf wählen. „Nie für diese Website" wird
+gemerkt. Hinweis: Apples Passwörter-App kann in WebKit-Apps von Drittanbietern weder ausfüllen noch speichern, das geht nur
+in Safari und Safari-Web-Apps; deshalb hat die App ihren eigenen Speicher im Schlüsselbund.
 Eigenes Fenster (merkt sich Größe und Lage), eigene Sitzung je App, Downloads nach „Downloads" mit Anzeige im Finder,
 Datei-Upload, Popups als eigene Fenster, JavaScript-Dialoge, Drucken (⌘P), Zoom (⌘+ ⌘- ⌘0), Zurück/Vorwärts (⌘[ ⌘]),
 Neu laden (⌘R), Startseite (⌘⇧H), „In Safari öffnen" (⌘⇧S), „Website-Daten dieser App löschen".
-Nicht enthalten: Passwort-Autofill aus dem iCloud-Schlüsselbund (nur Safari) und Web-Push.
+Nicht enthalten: Web-Push und Passkeys.
 
 ## Apps hinzufügen
 
