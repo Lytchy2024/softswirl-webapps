@@ -37,6 +37,10 @@ in Safari und Safari-Web-Apps; deshalb hat die App ihren eigenen Speicher im Sch
 Links derselben Website, die ein neues Fenster öffnen wollen, laden im selben Fenster (Zurück führt zurück); echte Popups bekommen ein eigenes Fenster. Eigenes Fenster (merkt sich Größe und Lage), eigene Sitzung je App, Downloads nach „Downloads" mit Anzeige im Finder,
 Datei-Upload, Popups als eigene Fenster, JavaScript-Dialoge, Drucken (⌘P), Zoom (⌘+ ⌘- ⌘0), Zurück/Vorwärts (⌘[ ⌘]),
 Neu laden (⌘R), Startseite (⌘⇧H), „In Safari öffnen" (⌘⇧S), „Website-Daten dieser App löschen".
+Beim ersten Anzeigen der Anmeldeseite (und nach einer fehlgeschlagenen Anmeldung, maximal zweimal) verwirft die App die
+Cookies der Website und lädt die Seite frisch; das räumt widersprüchliche Sitzungs-Cookies ab, wie sie das IndiMO-Portal
+setzt. Jede App schreibt ein Diagnoseprotokoll nach `~/Library/Logs/Softswirl Web-Apps/<App>.log` (Menü Anmeldung ›
+Diagnoseprotokoll anzeigen): Navigationen, Antwortcodes, Anmeldeformular, Speichern.
 Nicht enthalten: Web-Push und Passkeys.
 
 ## Apps hinzufügen

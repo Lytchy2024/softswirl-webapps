@@ -7,6 +7,20 @@ import AppKit
 import WebKit
 import Security
 
+// MARK: - Diagnoseprotokoll (~/Library/Logs/Softswirl Web-Apps/<App>.log)
+let logURL: URL = {
+    let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Softswirl Web-Apps", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let name = (Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String) ?? "WebApp"
+    return dir.appendingPathComponent("\(name).log")
+}()
+func dlog(_ s: String) {
+    let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    let line = "\(f.string(from: Date())) \(s)\n"
+    if let h = try? FileHandle(forWritingTo: logURL) { h.seekToEndOfFile(); h.write(line.data(using: .utf8)!); try? h.close() }
+    else { try? line.data(using: .utf8)!.write(to: logURL) }
+}
+
 // MARK: - Passwortspeicher (Schluesselbund)
 struct Credential { let host: String; let user: String; let password: String }
 enum Vault {
@@ -18,34 +32,40 @@ enum Vault {
     private static func query(host: String) -> [String: Any] {
         [kSecClass as String: kSecClassInternetPassword, kSecAttrServer as String: host]
     }
-    static func load(host: String) -> [Credential] {
-        var q = query(host: host); q[kSecReturnAttributes as String] = true; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitAll
+    private static func password(host: String, user: String) -> String? {
+        var q = query(host: host); q[kSecAttrAccount as String] = user; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let items = out as? [[String: Any]] else { return [] }
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        return String(data: d, encoding: .utf8)
+    }
+    private static func accounts(_ q: [String: Any]) -> [(host: String, user: String)] {
+        var qq = q; qq[kSecReturnAttributes as String] = true; qq[kSecMatchLimit as String] = kSecMatchLimitAll
+        var out: CFTypeRef?
+        let st = SecItemCopyMatching(qq as CFDictionary, &out)
+        if st != errSecSuccess { if st != errSecItemNotFound { lastError = st; dlog("Schluesselbund-Abfrage Fehler \(st)") }; return [] }
+        guard let items = out as? [[String: Any]] else { return [] }
         return items.compactMap { i in
-            guard let u = i[kSecAttrAccount as String] as? String, let d = i[kSecValueData as String] as? Data, let p = String(data: d, encoding: .utf8) else { return nil }
-            return Credential(host: host, user: u, password: p)
+            guard let h = i[kSecAttrServer as String] as? String, let u = i[kSecAttrAccount as String] as? String else { return nil }
+            return (h, u)
         }
     }
-    /// Alle Eintraege, deren Domain zur aktuellen passt (www.x.de ↔ login.x.de).
+    static func load(host: String) -> [Credential] {
+        accounts(query(host: host)).compactMap { a in password(host: a.host, user: a.user).map { Credential(host: a.host, user: a.user, password: $0) } }
+    }
+    /// Alle Eintraege dieser App, deren Domain zur aktuellen passt (www.x.de ↔ login.x.de).
     static func matching(host: String) -> [Credential] {
-        var q: [String: Any] = [kSecClass as String: kSecClassInternetPassword, kSecReturnAttributes as String: true,
-                                kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
-        q[kSecAttrLabel as String] = label
-        var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let items = out as? [[String: Any]] else { return [] }
         let base = baseDomain(host)
-        return items.compactMap { i in
-            guard let h = i[kSecAttrServer as String] as? String, baseDomain(h) == base, let u = i[kSecAttrAccount as String] as? String,
-                  let d = i[kSecValueData as String] as? Data, let p = String(data: d, encoding: .utf8) else { return nil }
-            return Credential(host: h, user: u, password: p)
-        }.sorted { $0.host == host && $1.host != host }
+        let all = accounts([kSecClass as String: kSecClassInternetPassword, kSecAttrLabel as String: label])
+        return all.filter { baseDomain($0.host) == base }
+            .compactMap { a in password(host: a.host, user: a.user).map { Credential(host: a.host, user: a.user, password: $0) } }
+            .sorted { $0.host == host && $1.host != host }
     }
     static var label: String { "Softswirl Web-App: \(Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String ?? "App")" }
     @discardableResult
     static func save(_ c: Credential) -> Bool {
         var q = query(host: c.host); q[kSecAttrAccount as String] = c.user
         let data = c.password.data(using: .utf8)!
+        lastError = errSecSuccess
         if SecItemCopyMatching(q as CFDictionary, nil) == errSecSuccess {
             lastError = SecItemUpdate(q as CFDictionary, [kSecValueData as String: data] as CFDictionary)
             return lastError == errSecSuccess
@@ -89,6 +109,9 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     var downloadTargets: [ObjectIdentifier: URL] = [:]
     var pendingSave: Credential?
     var askedThisPage: Set<String> = []
+    var loginCookieResetDone = false
+    var failedLoginResets = 0
+    var lastSubmitAt: Date?
     var neverSave: Set<String> { get { Set(UserDefaults.standard.stringArray(forKey: "neverSaveHosts") ?? []) } set { UserDefaults.standard.set(Array(newValue), forKey: "neverSaveHosts") } }
 
     // MARK: Start
@@ -102,7 +125,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool { if !flag { openMainWindow() }; return true }
-    func openMainWindow() { let wv = makeWebView(configuration: nil); makeWindow(for: wv, autosaveName: "HauptFenster"); wv.load(URLRequest(url: startURL)) }
+    func openMainWindow() { let wv = makeWebView(configuration: nil); makeWindow(for: wv, autosaveName: "HauptFenster"); wv.load(URLRequest(url: startURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)) }
 
     // MARK: WebView / Fenster
     func makeWebView(configuration: WKWebViewConfiguration?) -> WKWebView {
@@ -178,9 +201,23 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         decisionHandler(.allow)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let r = navigationResponse.response as? HTTPURLResponse, navigationResponse.isForMainFrame { dlog("Antwort \(r.statusCode) \(r.url?.absoluteString ?? "") \(r.mimeType ?? "")") }
         decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
     }
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { askedThisPage.removeAll() }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { askedThisPage.removeAll(); dlog("Navigation \(webView.url?.absoluteString ?? "")") }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { dlog("Geladen \(webView.url?.absoluteString ?? "")") }
+    /// Cookies der Website verwerfen und Seite neu laden (frische Sitzung; hilft bei Portalen mit widerspruechlichen Sitzungs-Cookies).
+    func resetCookies(for host: String, in wv: WKWebView, reason: String) {
+        let base = Vault.baseDomain(host); let store = WKWebsiteDataStore.default()
+        let types: Set<String> = [WKWebsiteDataTypeCookies, WKWebsiteDataTypeSessionStorage]
+        store.fetchDataRecords(ofTypes: types) { records in
+            let recs = records.filter { Vault.baseDomain($0.displayName) == base }
+            store.removeData(ofTypes: types, for: recs) {
+                dlog("Cookies fuer \(base) verworfen (\(reason), \(recs.count) Eintraege), Seite wird neu geladen")
+                DispatchQueue.main.async { wv.load(URLRequest(url: wv.url ?? self.startURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)) }
+            }
+        }
+    }
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
@@ -200,11 +237,21 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         let host = (body["host"] as? String) ?? wv.url?.host ?? ""
         switch type {
         case "loaded":
-            guard (body["hasPassword"] as? Bool) == true, let c = Vault.matching(host: host).first else { return }
+            guard (body["hasPassword"] as? Bool) == true else { return }
+            dlog("Anmeldeformular sichtbar auf \(host)")
+            if Vault.baseDomain(host) == Vault.baseDomain(startURL.host ?? host) {
+                if !loginCookieResetDone { loginCookieResetDone = true; resetCookies(for: host, in: wv, reason: "erste Anmeldeseite"); return }
+                if let t = lastSubmitAt, Date().timeIntervalSince(t) < 20, failedLoginResets < 2 {
+                    failedLoginResets += 1; lastSubmitAt = nil; dlog("Anmeldung ohne Erfolg (Formular wieder da)"); resetCookies(for: host, in: wv, reason: "Anmeldung fehlgeschlagen"); return
+                }
+            }
+            guard let c = Vault.matching(host: host).first else { dlog("keine gespeicherte Anmeldung fuer \(host)"); return }
+            dlog("Anmeldung eingetragen fuer \(host) (\(c.user))")
             let js = "window.__sswFill(\(jsString(c.user)), \(jsString(c.password)))"
             wv.evaluateJavaScript(js, completionHandler: nil)
         case "submit":
             guard let user = body["user"] as? String, let pass = body["pass"] as? String, !pass.isEmpty, !host.isEmpty else { return }
+            lastSubmitAt = Date(); dlog("Anmeldung abgeschickt auf \(host)")
             if neverSave.contains(Vault.baseDomain(host)) { return }
             let existing = Vault.load(host: host)
             if existing.contains(where: { $0.user == user && $0.password == pass }) { return }
@@ -229,7 +276,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         a.addButton(withTitle: update ? "Aktualisieren" : "Speichern"); a.addButton(withTitle: "Nicht jetzt"); a.addButton(withTitle: "Nie für diese Website")
         a.beginSheetModal(for: win) { r in
             switch r {
-            case .alertFirstButtonReturn: if !Vault.save(c) { self.toast("Speichern im Schlüsselbund fehlgeschlagen (Fehler \(Vault.lastError): \(SecCopyErrorMessageString(Vault.lastError, nil) as String? ?? ""))") }
+            case .alertFirstButtonReturn: dlog("Speichern fuer \(c.host) (\(c.user)): \(Vault.save(c) ? "ok" : "Fehler \(Vault.lastError)")"); if Vault.lastError != errSecSuccess { self.toast("Speichern im Schlüsselbund fehlgeschlagen (Fehler \(Vault.lastError): \(SecCopyErrorMessageString(Vault.lastError, nil) as String? ?? ""))") }
             case .alertThirdButtonReturn: var n = self.neverSave; n.insert(Vault.baseDomain(c.host)); self.neverSave = n
             default: break
             }
@@ -357,6 +404,8 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         pw.addItem(withTitle: "Anmeldung dieser Website löschen …", action: #selector(deleteForHost), keyEquivalent: "")
         pw.addItem(.separator())
         pw.addItem(withTitle: "Website-Daten dieser App löschen …", action: #selector(clearData), keyEquivalent: "")
+        pw.addItem(.separator())
+        pw.addItem(withTitle: "Diagnoseprotokoll anzeigen", action: #selector(showLog), keyEquivalent: "")
         let window = NSMenu(title: "Fenster"); let windowItem = NSMenuItem(); windowItem.submenu = window; main.addItem(windowItem)
         window.addItem(withTitle: "Im Dock ablegen", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
         window.addItem(withTitle: "Fenster schließen", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
@@ -371,6 +420,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     @objc func zoomOut() { if let w = currentWebView { w.pageZoom = max(w.pageZoom - 0.1, 0.5) } }
     @objc func zoomReset() { currentWebView?.pageZoom = 1 }
     @objc func newWindow() { openMainWindow() }
+    @objc func showLog() { NSWorkspace.shared.activateFileViewerSelecting([logURL]) }
     @objc func openInSafari() { if let u = currentWebView?.url ?? Optional(startURL) { NSWorkspace.shared.open(u) } }
     @objc func printPage() {
         guard let wv = currentWebView, let win = wv.window else { return }
