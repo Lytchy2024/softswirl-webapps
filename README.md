@@ -41,6 +41,9 @@ Beim ersten Anzeigen der Anmeldeseite (und nach einer fehlgeschlagenen Anmeldung
 Cookies der Website und lädt die Seite frisch; das räumt widersprüchliche Sitzungs-Cookies ab, wie sie das IndiMO-Portal
 setzt. Jede App schreibt ein Diagnoseprotokoll nach `~/Library/Logs/Softswirl Web-Apps/<App>.log` (Menü Anmeldung ›
 Diagnoseprotokoll anzeigen): Navigationen, Antwortcodes, Anmeldeformular, Speichern.
+Abschick-Sperre: Nach dem Klick auf Anmelden zeigt die App einen Hinweis „Anmeldung läuft" und verschluckt weitere Klicks
+und Enter, bis die Antwort da ist (höchstens 30 s). Bei langsamen Portalen wie IndiMO brachen sonst wiederholte Klicks den
+laufenden Anmeldeversuch ab und die Seite kam leer zurück. Ein Ladebalken am oberen Fensterrand zeigt laufende Ladevorgänge.
 Nicht enthalten: Web-Push und Passkeys.
 
 ## Apps hinzufügen

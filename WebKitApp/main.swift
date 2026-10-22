@@ -94,9 +94,18 @@ let formScript = """
  window.__sswFill=function(u,p){ const f=fields(); if(!f) return false; if(f.user && !f.user.value) setVal(f.user,u); if(!f.pw.value) setVal(f.pw,p); return true; };
  window.__sswRead=function(){ const f=fields(); if(!f||!f.pw.value) return null; return {user:f.user?f.user.value:'', pass:f.pw.value}; };
  function report(){ const c=window.__sswRead(); if(c) window.webkit.messageHandlers.ssw.postMessage({type:'submit', user:c.user, pass:c.pass, host:location.host}); }
- document.addEventListener('submit', report, true);
- document.addEventListener('click', e=>{ const b=e.target && e.target.closest ? e.target.closest('button, input[type=submit], [role=button]') : null; if(b) report(); }, true);
- document.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target && e.target.tagName==='INPUT') report(); }, true);
+ // Abschick-Sperre: waehrend ein Anmeldeversuch laeuft, werden weitere Klicks/Enter verschluckt (sonst bricht jeder Klick den
+ // laufenden Versuch ab, die Seite kommt leer zurueck und der Nutzer klickt erneut). Ein Hinweis zeigt, dass es arbeitet.
+ let submitting=false, timer=null;
+ function overlay(on){ let o=document.getElementById('__ssw_overlay'); if(on){ if(o) return; o=document.createElement('div'); o.id='__ssw_overlay';
+   o.style.cssText='position:fixed;left:0;top:0;right:0;z-index:2147483647;background:#1d1f22;color:#fff;font:14px -apple-system,sans-serif;padding:10px 16px;text-align:center;opacity:.95';
+   o.textContent='Anmeldung läuft – bitte einen Moment warten …'; (document.body||document.documentElement).appendChild(o); } else if(o) o.remove(); }
+ function lock(){ submitting=true; overlay(true); clearTimeout(timer); timer=setTimeout(()=>{ submitting=false; overlay(false); }, 30000); }
+ window.addEventListener('pagehide', ()=>{ submitting=false; });
+ document.addEventListener('submit', e=>{ if(submitting){ e.preventDefault(); e.stopImmediatePropagation(); return; } if(window.__sswRead()){ lock(); report(); } }, true);
+ document.addEventListener('click', e=>{ const b=e.target && e.target.closest ? e.target.closest('button, input[type=submit], [role=button]') : null; if(!b) return;
+   if(submitting && b.closest('form')){ e.preventDefault(); e.stopImmediatePropagation(); return; } }, true);
+ document.addEventListener('keydown', e=>{ if(e.key==='Enter' && e.target && e.target.tagName==='INPUT' && submitting){ e.preventDefault(); e.stopImmediatePropagation(); } }, true);
  function announce(){ window.webkit.messageHandlers.ssw.postMessage({type:'loaded', hasPassword: !!fields(), host:location.host}); }
  announce(); let tries=0; const t=setInterval(()=>{ tries++; if(fields()){ announce(); clearInterval(t); } else if(tries>12) clearInterval(t); }, 500);
 })();
@@ -109,6 +118,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     var downloadTargets: [ObjectIdentifier: URL] = [:]
     var pendingSave: Credential?
     var askedThisPage: Set<String> = []
+    var filledThisPage = false
     var loginCookieResetDone = false
     var failedLoginResets = 0
     var lastSubmitAt: Date?
@@ -146,9 +156,18 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         wv.navigationDelegate = self; wv.uiDelegate = self
         wv.allowsBackForwardNavigationGestures = true; wv.allowsMagnification = true
         wv.addObserver(self, forKeyPath: "title", options: [.new], context: nil)
+        wv.addObserver(self, forKeyPath: "estimatedProgress", options: [.new], context: nil)
+        let bar = NSProgressIndicator(frame: NSRect(x: 0, y: wv.bounds.height - 3, width: wv.bounds.width, height: 3))
+        bar.style = .bar; bar.isIndeterminate = false; bar.minValue = 0; bar.maxValue = 1; bar.autoresizingMask = [.width, .minYMargin]
+        bar.isHidden = true; bar.identifier = NSUserInterfaceItemIdentifier("sswProgress")
+        wv.addSubview(bar)
         return wv
     }
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == "estimatedProgress", let wv = object as? WKWebView, let bar = wv.subviews.first(where: { $0.identifier?.rawValue == "sswProgress" }) as? NSProgressIndicator {
+            bar.doubleValue = wv.estimatedProgress; bar.isHidden = wv.estimatedProgress >= 1 || !wv.isLoading
+            if wv.estimatedProgress >= 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { bar.isHidden = true } }
+        }
         if keyPath == "title", let wv = object as? WKWebView {
             let t = (wv.title ?? "").trimmingCharacters(in: .whitespaces)
             wv.window?.title = t.isEmpty ? appName : "\(t) – \(appName)"
@@ -168,6 +187,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
             guard let self = self else { return }
             self.windows.removeAll { $0 === win }
             (win.contentView as? WKWebView)?.removeObserver(self, forKeyPath: "title")
+            (win.contentView as? WKWebView)?.removeObserver(self, forKeyPath: "estimatedProgress")
         }
         win.makeKeyAndOrderFront(nil)
         return win
@@ -204,7 +224,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         if let r = navigationResponse.response as? HTTPURLResponse, navigationResponse.isForMainFrame { dlog("Antwort \(r.statusCode) \(r.url?.absoluteString ?? "") \(r.mimeType ?? "")") }
         decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
     }
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { askedThisPage.removeAll(); dlog("Navigation \(webView.url?.absoluteString ?? "")") }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { askedThisPage.removeAll(); filledThisPage = false; dlog("Navigation \(webView.url?.absoluteString ?? "")") }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { dlog("Geladen \(webView.url?.absoluteString ?? "")") }
     /// Cookies der Website verwerfen und Seite neu laden (frische Sitzung; hilft bei Portalen mit widerspruechlichen Sitzungs-Cookies).
     func resetCookies(for host: String, in wv: WKWebView, reason: String) {
@@ -237,7 +257,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         let host = (body["host"] as? String) ?? wv.url?.host ?? ""
         switch type {
         case "loaded":
-            guard (body["hasPassword"] as? Bool) == true else { return }
+            guard (body["hasPassword"] as? Bool) == true, message.frameInfo.isMainFrame, !filledThisPage else { return }
             dlog("Anmeldeformular sichtbar auf \(host)")
             if Vault.baseDomain(host) == Vault.baseDomain(startURL.host ?? host) {
                 if !loginCookieResetDone { loginCookieResetDone = true; resetCookies(for: host, in: wv, reason: "erste Anmeldeseite"); return }
@@ -246,6 +266,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
                 }
             }
             guard let c = Vault.matching(host: host).first else { dlog("keine gespeicherte Anmeldung fuer \(host)"); return }
+            filledThisPage = true
             dlog("Anmeldung eingetragen fuer \(host) (\(c.user))")
             let js = "window.__sswFill(\(jsString(c.user)), \(jsString(c.password)))"
             wv.evaluateJavaScript(js, completionHandler: nil)
