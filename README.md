@@ -30,11 +30,11 @@ vorher signiert und notarisiert.
 
 Symbolleiste mit Zurück, Vorwärts, Neu laden, **Startseite** und einem Schlüssel-Knopf für gespeicherte Anmeldungen.
 **Eingebauter Passwortspeicher:** Beim Anmelden fragt die App, ob sie Benutzername und Passwort für die Website speichern
-soll (im Schlüsselbund dieses Macs, mit iCloud-Schlüsselbund auf allen Geräten des Nutzers). Beim nächsten Besuch trägt sie
+soll (im Anmelde-Schlüsselbund dieses Macs; iCloud-Abgleich bräuchte ein Developer-ID-Profil mit Keychain Sharing, siehe unten). Beim nächsten Besuch trägt sie
 die Anmeldung automatisch ein; mehrere Konten lassen sich über den Schlüssel-Knopf wählen. „Nie für diese Website" wird
 gemerkt. Hinweis: Apples Passwörter-App kann in WebKit-Apps von Drittanbietern weder ausfüllen noch speichern, das geht nur
 in Safari und Safari-Web-Apps; deshalb hat die App ihren eigenen Speicher im Schlüsselbund.
-Eigenes Fenster (merkt sich Größe und Lage), eigene Sitzung je App, Downloads nach „Downloads" mit Anzeige im Finder,
+Links derselben Website, die ein neues Fenster öffnen wollen, laden im selben Fenster (Zurück führt zurück); echte Popups bekommen ein eigenes Fenster. Eigenes Fenster (merkt sich Größe und Lage), eigene Sitzung je App, Downloads nach „Downloads" mit Anzeige im Finder,
 Datei-Upload, Popups als eigene Fenster, JavaScript-Dialoge, Drucken (⌘P), Zoom (⌘+ ⌘- ⌘0), Zurück/Vorwärts (⌘[ ⌘]),
 Neu laden (⌘R), Startseite (⌘⇧H), „In Safari öffnen" (⌘⇧S), „Website-Daten dieser App löschen".
 Nicht enthalten: Web-Push und Passkeys.
@@ -56,6 +56,13 @@ gh release create v1.0.0 dist/Softswirl-Web-Apps-1.0.0.dmg --title "Softswirl We
 ```
 
 Ohne Zertifikat: `scripts/build_release.sh --adhoc` (nur lokal, unsigniert im Sinne von Gatekeeper).
+
+## iCloud-Abgleich der gespeicherten Anmeldungen (optional, nicht eingerichtet)
+
+Der Passwortspeicher nutzt den Anmelde-Schlüsselbund des Macs. Damit Einträge über den iCloud-Schlüsselbund auf andere
+Geräte gelangen, bräuchten die Apps den Data-Protection-Keychain, und dafür ein Developer-ID-Provisioning-Profil mit der
+Capability „Keychain Sharing" (Entwicklerportal → Identifiers → App-ID je App → Profil erzeugen, im Bundle als
+`embedded.provisionprofile`, Entitlement `keychain-access-groups`). Ohne Profil liefert SecItemAdd Fehler -34018.
 
 ## Aufbau
 

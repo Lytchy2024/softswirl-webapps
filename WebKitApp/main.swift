@@ -14,9 +14,9 @@ enum Vault {
         let parts = host.lowercased().split(separator: ".").map(String.init)
         return parts.count >= 2 ? parts.suffix(2).joined(separator: ".") : host.lowercased()
     }
+    static var lastError: OSStatus = errSecSuccess
     private static func query(host: String) -> [String: Any] {
-        [kSecClass as String: kSecClassInternetPassword, kSecAttrServer as String: host,
-         kSecUseDataProtectionKeychain as String: true, kSecAttrSynchronizable as String: kSecAttrSynchronizableAny]
+        [kSecClass as String: kSecClassInternetPassword, kSecAttrServer as String: host]
     }
     static func load(host: String) -> [Credential] {
         var q = query(host: host); q[kSecReturnAttributes as String] = true; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitAll
@@ -29,8 +29,7 @@ enum Vault {
     }
     /// Alle Eintraege, deren Domain zur aktuellen passt (www.x.de ↔ login.x.de).
     static func matching(host: String) -> [Credential] {
-        var q: [String: Any] = [kSecClass as String: kSecClassInternetPassword, kSecUseDataProtectionKeychain as String: true,
-                                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny, kSecReturnAttributes as String: true,
+        var q: [String: Any] = [kSecClass as String: kSecClassInternetPassword, kSecReturnAttributes as String: true,
                                 kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
         q[kSecAttrLabel as String] = label
         var out: CFTypeRef?
@@ -48,19 +47,17 @@ enum Vault {
         var q = query(host: c.host); q[kSecAttrAccount as String] = c.user
         let data = c.password.data(using: .utf8)!
         if SecItemCopyMatching(q as CFDictionary, nil) == errSecSuccess {
-            return SecItemUpdate(q as CFDictionary, [kSecValueData as String: data] as CFDictionary) == errSecSuccess
+            lastError = SecItemUpdate(q as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            return lastError == errSecSuccess
         }
         var add = q; add[kSecValueData as String] = data; add[kSecAttrLabel as String] = label
-        add[kSecAttrSynchronizable as String] = true            // iCloud-Schluesselbund, wenn aktiv
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-        var st = SecItemAdd(add as CFDictionary, nil)
-        if st != errSecSuccess { add[kSecAttrSynchronizable as String] = false; st = SecItemAdd(add as CFDictionary, nil) }
-        return st == errSecSuccess
+        add[kSecAttrProtocol as String] = kSecAttrProtocolHTTPS
+        lastError = SecItemAdd(add as CFDictionary, nil)
+        return lastError == errSecSuccess
     }
     static func delete(host: String, user: String) { var q = query(host: host); q[kSecAttrAccount as String] = user; SecItemDelete(q as CFDictionary) }
     static func deleteAll() {
-        let q: [String: Any] = [kSecClass as String: kSecClassInternetPassword, kSecUseDataProtectionKeychain as String: true,
-                                kSecAttrSynchronizable as String: kSecAttrSynchronizableAny, kSecAttrLabel as String: label]
+        let q: [String: Any] = [kSecClass as String: kSecClassInternetPassword, kSecAttrLabel as String: label]
         SecItemDelete(q as CFDictionary)
     }
 }
@@ -184,6 +181,7 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         decisionHandler(navigationResponse.canShowMIMEType ? .allow : .download)
     }
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { askedThisPage.removeAll() }
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { showLoadError(error, in: webView) }
@@ -227,11 +225,11 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
         pendingSave = nil
         let update = Vault.load(host: c.host).contains { $0.user == c.user }
         let a = NSAlert(); a.messageText = update ? "Passwort für \(c.host) aktualisieren?" : "Passwort für \(c.host) speichern?"
-        a.informativeText = "Benutzer: \(c.user.isEmpty ? "(ohne Benutzername)" : c.user)\nGespeichert wird im Schlüsselbund dieses Macs (mit iCloud-Schlüsselbund auf allen deinen Geräten). Beim nächsten Besuch wird die Anmeldung automatisch eingetragen."
+        a.informativeText = "Benutzer: \(c.user.isEmpty ? "(ohne Benutzername)" : c.user)\nGespeichert wird im Schlüsselbund dieses Macs. Beim nächsten Besuch wird die Anmeldung automatisch eingetragen."
         a.addButton(withTitle: update ? "Aktualisieren" : "Speichern"); a.addButton(withTitle: "Nicht jetzt"); a.addButton(withTitle: "Nie für diese Website")
         a.beginSheetModal(for: win) { r in
             switch r {
-            case .alertFirstButtonReturn: if !Vault.save(c) { self.toast("Speichern im Schlüsselbund fehlgeschlagen") }
+            case .alertFirstButtonReturn: if !Vault.save(c) { self.toast("Speichern im Schlüsselbund fehlgeschlagen (Fehler \(Vault.lastError): \(SecCopyErrorMessageString(Vault.lastError, nil) as String? ?? ""))") }
             case .alertThirdButtonReturn: var n = self.neverSave; n.insert(Vault.baseDomain(c.host)); self.neverSave = n
             default: break
             }
@@ -295,25 +293,33 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
 
     // MARK: Popups, Dialoge, Dateiauswahl
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        // Links mit target=_blank / window.open ohne Fenstergroesse auf derselben Website: im selben Fenster laden
+        // (Zurueck-Pfeil fuehrt zurueck). Echte Popups (mit Groesse) und leere Fenster (document.write) bekommen ein eigenes Fenster.
+        if let url = navigationAction.request.url, let h = url.host, !h.isEmpty, windowFeatures.width == nil, windowFeatures.height == nil {
+            let here = webView.url?.host ?? startURL.host ?? h
+            if Vault.baseDomain(h) == Vault.baseDomain(here) || Vault.baseDomain(h) == Vault.baseDomain(startURL.host ?? h) {
+                webView.load(navigationAction.request); return nil
+            }
+        }
         let wv = makeWebView(configuration: configuration); makeWindow(for: wv, autosaveName: "PopupFenster"); return wv
     }
     func webViewDidClose(_ webView: WKWebView) { webView.window?.close() }
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         let a = NSAlert(); a.messageText = appName; a.informativeText = message; a.addButton(withTitle: "OK")
-        a.beginSheetModal(for: webView.window ?? NSWindow()) { _ in completionHandler() }
+        if let w = webView.window, w.isVisible { a.beginSheetModal(for: w) { _ in completionHandler() } } else { a.runModal(); completionHandler() }
     }
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
         let a = NSAlert(); a.messageText = appName; a.informativeText = message; a.addButton(withTitle: "OK"); a.addButton(withTitle: "Abbrechen")
-        a.beginSheetModal(for: webView.window ?? NSWindow()) { r in completionHandler(r == .alertFirstButtonReturn) }
+        if let w = webView.window, w.isVisible { a.beginSheetModal(for: w) { r in completionHandler(r == .alertFirstButtonReturn) } } else { completionHandler(a.runModal() == .alertFirstButtonReturn) }
     }
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
         let a = NSAlert(); a.messageText = appName; a.informativeText = prompt; a.addButton(withTitle: "OK"); a.addButton(withTitle: "Abbrechen")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24)); field.stringValue = defaultText ?? ""; a.accessoryView = field
-        a.beginSheetModal(for: webView.window ?? NSWindow()) { r in completionHandler(r == .alertFirstButtonReturn ? field.stringValue : nil) }
+        if let w = webView.window, w.isVisible { a.beginSheetModal(for: w) { r in completionHandler(r == .alertFirstButtonReturn ? field.stringValue : nil) } } else { completionHandler(a.runModal() == .alertFirstButtonReturn ? field.stringValue : nil) }
     }
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
         let p = NSOpenPanel(); p.allowsMultipleSelection = parameters.allowsMultipleSelection; p.canChooseDirectories = parameters.allowsDirectories; p.canChooseFiles = true
-        p.beginSheetModal(for: webView.window ?? NSWindow()) { r in completionHandler(r == .OK ? p.urls : nil) }
+        if let w = webView.window, w.isVisible { p.beginSheetModal(for: w) { r in completionHandler(r == .OK ? p.urls : nil) } } else { completionHandler(p.runModal() == .OK ? p.urls : nil) }
     }
 
     // MARK: Menue und Aktionen
