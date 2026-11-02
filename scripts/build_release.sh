@@ -132,6 +132,7 @@ cat > "$INST/Contents/Info.plist" <<PL
 </dict></plist>
 PL
 sign "$INST"
+xattr -cr "$INST" "$APPS" 2>/dev/null || true   # Finder-/Resource-Attribute entfernen, sonst verweigert codesign ("detritus")
 codesign --verify --deep --strict "$INST" && echo "   Signatur geprueft ($([ $ADHOC -eq 1 ] && echo 'ad hoc' || echo "$SIGN_ID"))"
 
 if [ $NOTARIZE -eq 1 ]; then
