@@ -1,0 +1,13 @@
+---
+description: Gleicher Wissensstand mit Antigravity, nur dieses Projekt
+alwaysApply: true
+---
+
+# Gleicher Wissensstand
+
+Dieses Projekt bleibt für sich. Cursor und Antigravity öffnen denselben Ordner.
+
+- Vor jeder Änderung `AGENTS.md` und alle Dateien in `.agents/rules/` lesen. Das ist derselbe Stand, den Antigravity automatisch lädt.
+- Dauerhafte Entscheidungen, Korrekturen und den aktuellen Stand in `.agents/rules/` schreiben, nicht nur in den Chat.
+- Nichts aus einem anderen Projektordner übernehmen.
+- Wenn `claude-gespraeche.md` in `.agents/rules/` liegt, gehört nur diese Gesprächsliste zu diesem Projekt.

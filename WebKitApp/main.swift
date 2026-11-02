@@ -445,8 +445,27 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     @objc func openInSafari() { if let u = currentWebView?.url ?? Optional(startURL) { NSWorkspace.shared.open(u) } }
     @objc func printPage() {
         guard let wv = currentWebView, let win = wv.window else { return }
-        let op = wv.printOperation(with: NSPrintInfo.shared); op.view?.frame = wv.bounds
-        op.runModal(for: win, delegate: nil, didRun: nil, contextInfo: nil)
+        // Drucken wie Safari: Inhalt auf die Seitenbreite skalieren. Die Standard-Druckeinstellungen schneiden Inhalt ab, der breiter
+        // als das Papier ist, und WebKit verkleinert beim Druck hoechstens um den Faktor 2 (breite Tabellen wurden abgeschnitten).
+        let info = NSPrintInfo.shared.copy() as! NSPrintInfo   // Kopie: die globalen Einstellungen bleiben unveraendert
+        info.horizontalPagination = .fit; info.verticalPagination = .automatic
+        info.isHorizontallyCentered = true; info.isVerticallyCentered = false
+        info.topMargin = 36; info.bottomMargin = 36; info.leftMargin = 36; info.rightMargin = 36   // 1,27 cm Rand
+        func avail(_ i: NSPrintInfo) -> CGFloat { i.paperSize.width - i.leftMargin - i.rightMargin }
+        // Mindestbreite des Inhalts messen: html kurz auf Seitenbreite setzen, scrollWidth lesen, zuruecksetzen (synchron, kein Zwischen-Paint)
+        let js = "(function(w){var d=document.documentElement,b=document.body,ow=d.style.width;d.style.width=w+'px';var s=Math.max(d.scrollWidth,b?b.scrollWidth:0);d.style.width=ow;return s;})(\(Int(avail(info))))"
+        wv.evaluateJavaScript(js) { r, _ in
+            guard wv.window != nil else { return }
+            let content = max((r as? NSNumber)?.doubleValue ?? 0, 1)
+            var scale = min(1.0, avail(info) / content)
+            if scale < 0.5 { info.orientation = .landscape; scale = min(1.0, avail(info) / content) }   // sehr breite Inhalte: Querformat
+            info.scalingFactor = max(0.25, scale)
+            let op = wv.printOperation(with: info)
+            op.view?.frame = NSRect(x: 0, y: 0, width: avail(info), height: info.paperSize.height - info.topMargin - info.bottomMargin)
+            op.printPanel.options.formUnion([.showsPaperSize, .showsOrientation, .showsScaling, .showsPageRange, .showsCopies, .showsPreview])
+            op.jobTitle = wv.title.flatMap { $0.isEmpty ? nil : $0 } ?? win.title
+            op.runModal(for: win, delegate: nil, didRun: nil, contextInfo: nil)
+        }
     }
     @objc func clearData() {
         let a = NSAlert(); a.messageText = "Website-Daten löschen?"; a.informativeText = "Cookies, Sitzung und Cache dieser App werden entfernt. Gespeicherte Anmeldungen im Schlüsselbund bleiben erhalten."

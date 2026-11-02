@@ -44,6 +44,10 @@ Diagnoseprotokoll anzeigen): Navigationen, Antwortcodes, Anmeldeformular, Speich
 Abschick-Sperre: Nach dem Klick auf Anmelden zeigt die App einen Hinweis „Anmeldung läuft" und verschluckt weitere Klicks
 und Enter, bis die Antwort da ist (höchstens 30 s). Bei langsamen Portalen wie IndiMO brachen sonst wiederholte Klicks den
 laufenden Anmeldeversuch ab und die Seite kam leer zurück. Ein Ladebalken am oberen Fensterrand zeigt laufende Ladevorgänge.
+Drucken (⌘P) skaliert wie Safari auf die Seitenbreite: Die App misst die Mindestbreite der Seite und setzt die Druckskalierung
+so, dass nichts abgeschnitten wird; sehr breite Inhalte (z. B. BBT-Dokumente mit breiten Tabellen) werden automatisch im
+Querformat vorgeschlagen. Papierformat, Ausrichtung und Skalierung lassen sich im Druckdialog ändern. (Bis 1.2.4 wurden breite
+Seiten rechts abgeschnitten, weil die Standard-Druckeinstellungen „abschneiden" statt „einpassen" vorgeben.)
 Nicht enthalten: Web-Push und Passkeys.
 
 ## Apps hinzufügen
