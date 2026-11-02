@@ -9,7 +9,7 @@
 # Ergebnis: dist/Softswirl-Web-Apps-<version>.dmg (signiert, notarisiert, gestapelt), dist/Softswirl Web-Apps.app
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="1.2.0"; NOTARIZE=1; ADHOC=0
+VERSION="1.2.0"; NOTARIZE=1; ADHOC=0; INSTALLER_ONLY=0
 while [ $# -gt 0 ]; do case "$1" in --version) VERSION="$2"; shift;; --no-notarize) NOTARIZE=0;; --adhoc) ADHOC=1;; --installer-only) INSTALLER_ONLY=1;; *) echo "unbekannt: $1"; exit 1;; esac; shift; done
 SIGN_ID="${SIGN_ID:-}"; NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 [ -n "$SIGN_ID" ] || ADHOC=1
