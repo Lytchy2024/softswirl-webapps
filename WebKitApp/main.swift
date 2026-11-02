@@ -445,23 +445,24 @@ final class WebAppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegat
     @objc func openInSafari() { if let u = currentWebView?.url ?? Optional(startURL) { NSWorkspace.shared.open(u) } }
     @objc func printPage() {
         guard let wv = currentWebView, let win = wv.window else { return }
-        // Drucken wie Safari: Inhalt auf die Seitenbreite skalieren. Die Standard-Druckeinstellungen schneiden Inhalt ab, der breiter
-        // als das Papier ist, und WebKit verkleinert beim Druck hoechstens um den Faktor 2 (breite Tabellen wurden abgeschnitten).
+        // Drucken: Druckbreite = Papierbreite (bis 1.2.4 Fensterbreite -> rechts abgeschnitten). WebKit passt breiten Inhalt selbst
+        // bis Faktor 2 ein (wie Safari); darueber hinaus wird skaliert, dafuer wird die Breite im Druck-Layout der Seite gemessen
+        // (mediaType "print", Druck-Stylesheets greifen). Ausrichtung bleibt Hochformat, der Nutzer aendert sie im Dialog.
+        // (1.2.5 mass die Bildschirmbreite und skalierte zu stark/Querformat.)
         let info = NSPrintInfo.shared.copy() as! NSPrintInfo   // Kopie: die globalen Einstellungen bleiben unveraendert
         info.horizontalPagination = .fit; info.verticalPagination = .automatic
         info.isHorizontallyCentered = true; info.isVerticallyCentered = false
         info.topMargin = 36; info.bottomMargin = 36; info.leftMargin = 36; info.rightMargin = 36   // 1,27 cm Rand
-        func avail(_ i: NSPrintInfo) -> CGFloat { i.paperSize.width - i.leftMargin - i.rightMargin }
-        // Mindestbreite des Inhalts messen: html kurz auf Seitenbreite setzen, scrollWidth lesen, zuruecksetzen (synchron, kein Zwischen-Paint)
-        let js = "(function(w){var d=document.documentElement,b=document.body,ow=d.style.width;d.style.width=w+'px';var s=Math.max(d.scrollWidth,b?b.scrollWidth:0);d.style.width=ow;return s;})(\(Int(avail(info))))"
+        let avail = info.paperSize.width - info.leftMargin - info.rightMargin
+        let js = "(function(w){var d=document.documentElement,b=document.body,ow=d.style.width;d.style.width=w+'px';var s=b?Math.max(b.scrollWidth,b.getBoundingClientRect().width):d.scrollWidth;d.style.width=ow;return s;})(\(Int(avail)))"
+        wv.mediaType = "print"
         wv.evaluateJavaScript(js) { r, _ in
+            wv.mediaType = nil
             guard wv.window != nil else { return }
-            let content = max((r as? NSNumber)?.doubleValue ?? 0, 1)
-            var scale = min(1.0, avail(info) / content)
-            if scale < 0.5 { info.orientation = .landscape; scale = min(1.0, avail(info) / content) }   // sehr breite Inhalte: Querformat
-            info.scalingFactor = max(0.25, scale)
+            let printWidth = (r as? NSNumber)?.doubleValue ?? 0
+            if printWidth > avail * 2 { info.scalingFactor = max(0.2, avail / printWidth) }   // nur jenseits von WebKits eigener Einpassung
             let op = wv.printOperation(with: info)
-            op.view?.frame = NSRect(x: 0, y: 0, width: avail(info), height: info.paperSize.height - info.topMargin - info.bottomMargin)
+            op.view?.frame = NSRect(x: 0, y: 0, width: avail, height: info.paperSize.height - info.topMargin - info.bottomMargin)
             op.printPanel.options.formUnion([.showsPaperSize, .showsOrientation, .showsScaling, .showsPageRange, .showsCopies, .showsPreview])
             op.jobTitle = wv.title.flatMap { $0.isEmpty ? nil : $0 } ?? win.title
             op.runModal(for: win, delegate: nil, didRun: nil, contextInfo: nil)

@@ -44,10 +44,12 @@ Diagnoseprotokoll anzeigen): Navigationen, Antwortcodes, Anmeldeformular, Speich
 Abschick-Sperre: Nach dem Klick auf Anmelden zeigt die App einen Hinweis „Anmeldung läuft" und verschluckt weitere Klicks
 und Enter, bis die Antwort da ist (höchstens 30 s). Bei langsamen Portalen wie IndiMO brachen sonst wiederholte Klicks den
 laufenden Anmeldeversuch ab und die Seite kam leer zurück. Ein Ladebalken am oberen Fensterrand zeigt laufende Ladevorgänge.
-Drucken (⌘P) skaliert wie Safari auf die Seitenbreite: Die App misst die Mindestbreite der Seite und setzt die Druckskalierung
-so, dass nichts abgeschnitten wird; sehr breite Inhalte (z. B. BBT-Dokumente mit breiten Tabellen) werden automatisch im
-Querformat vorgeschlagen. Papierformat, Ausrichtung und Skalierung lassen sich im Druckdialog ändern. (Bis 1.2.4 wurden breite
-Seiten rechts abgeschnitten, weil die Standard-Druckeinstellungen „abschneiden" statt „einpassen" vorgeben.)
+Drucken (⌘P): Die Druckbreite ist die Papierbreite (nicht die Fensterbreite), damit greifen die Druck-Stylesheets der
+Website und WebKit passt breiteren Inhalt wie Safari bis Faktor 2 selbst ein; A4-Dokumente drucken im Hochformat bei 100 %.
+Nur Inhalt, der breiter als das Doppelte der Seite ist (sehr breite Tabellen), wird zusätzlich skaliert; dafür misst die App
+die Breite im Druck-Layout der Seite. Ausrichtung, Papierformat und Skalierung lassen sich im Druckdialog ändern. (Bis 1.2.4
+wurde die Fensterbreite als Druckbreite benutzt, breite Fenster schnitten rechts ab; 1.2.5 skalierte nach der Bildschirmbreite
+und damit zu stark.)
 Nicht enthalten: Web-Push und Passkeys.
 
 ## Apps hinzufügen
